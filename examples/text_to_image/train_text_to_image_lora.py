@@ -47,6 +47,14 @@ from diffusers.training_utils import compute_snr
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 
+from transformers import BitsAndBytesConfig
+import bitsandbytes as bnb
+import torch
+from accelerate.utils import BnbQuantizationConfig
+from accelerate.utils import load_and_quantize_model
+from accelerate import init_empty_weights
+from huggingface_hub import snapshot_download
+from huggingface_hub import hf_hub_url, hf_hub_download
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.25.0.dev0")
@@ -467,6 +475,16 @@ def main():
     unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision, variant=args.variant
     )
+
+    bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4")
+
+    # noise_scheduler = load_and_quantize_model(model=noise_scheduler, bnb_quantization_config=bnb_quantization_config, device_map="auto")
+    # tokenizer = load_and_quantize_model(model=tokenizer, bnb_quantization_config=bnb_quantization_config, device_map="auto")
+    text_encoder = load_and_quantize_model(model=text_encoder, bnb_quantization_config=bnb_quantization_config, device_map="auto")
+    # vae = load_and_quantize_model(model=vae, bnb_quantization_config=bnb_quantization_config, device_map="auto")
+    unet = load_and_quantize_model(model=unet, bnb_quantization_config=bnb_quantization_config, device_map="auto")
+
+
     # freeze parameters of models to save more memory
     unet.requires_grad_(False)
     vae.requires_grad_(False)
