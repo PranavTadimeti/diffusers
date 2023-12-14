@@ -47,6 +47,15 @@ from diffusers.training_utils import compute_snr
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 
+from transformers import BitsAndBytesConfig
+import bitsandbytes as bnb
+import torch
+from accelerate.utils import BnbQuantizationConfig
+from accelerate.utils import load_and_quantize_model
+from accelerate import init_empty_weights
+from huggingface_hub import snapshot_download
+from huggingface_hub import hf_hub_url, hf_hub_download
+
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.25.0.dev0")
 
@@ -457,15 +466,26 @@ def main():
     tokenizer = CLIPTokenizer.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
     )
-    text_encoder = CLIPTextModel.from_pretrained(
+    temp_text_encoder = CLIPTextModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision
     )
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant=args.variant
     )
-    unet = UNet2DConditionModel.from_pretrained(
+    temp_unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision, variant=args.variant
     )
+
+    bnb_quantization_config = BnbQuantizationConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4")
+
+    # noise_scheduler = load_and_quantize_model(model=noise_scheduler, bnb_quantization_config=bnb_quantization_config, device_map="auto")
+    # tokenizer = load_and_quantize_model(model=tokenizer, bnb_quantization_config=bnb_quantization_config, device_map="auto")
+    text_encoder = load_and_quantize_model(model=temp_text_encoder, bnb_quantization_config=bnb_quantization_config, device_map="auto")
+    # vae = load_and_quantize_model(model=vae, bnb_quantization_config=bnb_quantization_config, device_map="auto")
+    unet = load_and_quantize_model(model=temp_unet, bnb_quantization_config=bnb_quantization_config, device_map="auto")
+
+    del temp_unet
+    del temp_text_encoder
 
     # freeze parameters of models to save more memory
     unet.requires_grad_(False)
@@ -489,7 +509,7 @@ def main():
     )
 
     # Move unet, vae and text_encoder to device and cast to weight_dtype
-    unet.to(accelerator.device, dtype=weight_dtype)
+    # unet.to(accelerator.device, dtype=weight_dtype)
     vae.to(accelerator.device, dtype=weight_dtype)
     text_encoder.to(accelerator.device, dtype=weight_dtype)
 
@@ -522,13 +542,6 @@ def main():
 
     # Initialize the optimizer
     if args.use_8bit_adam:
-        try:
-            import bitsandbytes as bnb
-        except ImportError:
-            raise ImportError(
-                "Please install bitsandbytes to use 8-bit Adam. You can do so by running `pip install bitsandbytes`"
-            )
-
         optimizer_cls = bnb.optim.AdamW8bit
     else:
         optimizer_cls = torch.optim.AdamW
