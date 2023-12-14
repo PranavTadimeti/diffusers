@@ -466,13 +466,13 @@ def main():
     tokenizer = CLIPTokenizer.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
     )
-    text_encoder = CLIPTextModel.from_pretrained(
+    temp_text_encoder = CLIPTextModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision
     )
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant=args.variant
     )
-    unet = UNet2DConditionModel.from_pretrained(
+    temp_unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision, variant=args.variant
     )
 
@@ -480,10 +480,12 @@ def main():
 
     # noise_scheduler = load_and_quantize_model(model=noise_scheduler, bnb_quantization_config=bnb_quantization_config, device_map="auto")
     # tokenizer = load_and_quantize_model(model=tokenizer, bnb_quantization_config=bnb_quantization_config, device_map="auto")
-    text_encoder = load_and_quantize_model(model=text_encoder, bnb_quantization_config=bnb_quantization_config, device_map="auto")
+    text_encoder = load_and_quantize_model(model=temp_text_encoder, bnb_quantization_config=bnb_quantization_config, device_map="auto")
     # vae = load_and_quantize_model(model=vae, bnb_quantization_config=bnb_quantization_config, device_map="auto")
-    unet = load_and_quantize_model(model=unet, bnb_quantization_config=bnb_quantization_config, device_map="auto")
+    unet = load_and_quantize_model(model=temp_unet, bnb_quantization_config=bnb_quantization_config, device_map="auto")
 
+    del temp_unet
+    del temp_text_encoder
 
     # freeze parameters of models to save more memory
     unet.requires_grad_(False)
